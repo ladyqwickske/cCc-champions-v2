@@ -1073,8 +1073,8 @@ function filterPlayerTable() {
               currentPeriodTargetPoints = null;
               currentViewingPeriodName = null;
               updateRequiredPointsDisplay();
-              // Use end of day UTC for countdown
-              const endDateStr = formatDateAsUTC(end) + 'T23:59:59Z';
+              // Use 5PM UTC (game reset time) for countdown
+              const endDateStr = formatDateAsUTC(end) + 'T17:00:00Z';
              // console.log('[Countdown] Calling updateCountdownTimer (Fallback) with:', endDateStr);
               updateCountdownTimer(endDateStr);
               loadDashboard();
@@ -1101,7 +1101,7 @@ function filterPlayerTable() {
               currentPeriodTargetPoints = null;
               currentViewingPeriodName = null;
               updateRequiredPointsDisplay();
-              const endDateStr = formatDateAsUTC(end) + 'T23:59:59Z';
+              const endDateStr = formatDateAsUTC(end) + 'T17:00:00Z';
               console.log('[Countdown] Calling updateCountdownTimer (No Events) with:', endDateStr);
               updateCountdownTimer(endDateStr);
               loadDashboard();
@@ -1166,7 +1166,7 @@ function filterPlayerTable() {
             currentViewingPeriodName = activePeriod.eventName || null;
             currentPeriodTargetPoints = activePeriod.targetPoints || null;
             updateRequiredPointsDisplay();
-            const endDateStr = formatDateAsUTC(end) + 'T23:59:59Z';
+            const endDateStr = formatDateAsUTC(end) + 'T17:00:00Z';
        //     console.log('[Countdown] Calling updateCountdownTimer (Active Period) with:', endDateStr);
             updateCountdownTimer(endDateStr);
             loadDashboard();
@@ -1185,7 +1185,7 @@ function filterPlayerTable() {
             currentPeriodTargetPoints = null;
             currentViewingPeriodName = null;
             updateRequiredPointsDisplay();
-            const endDateStr = formatDateAsUTC(end) + 'T23:59:59Z';
+            const endDateStr = formatDateAsUTC(end) + 'T17:00:00Z';
             console.log('[Countdown] Calling updateCountdownTimer (Error) with:', endDateStr);
             updateCountdownTimer(endDateStr);
             loadDashboard();
