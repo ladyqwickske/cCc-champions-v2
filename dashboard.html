@@ -718,11 +718,11 @@
     function loadPointTargets() {
       if (pointTargetsCache) return pointTargetsCache;
       try {
-        const raw = JSON.parse(localStorage.getItem(PT_KEY) || '{"default":3000,"overrides":[]}');
+        const raw = JSON.parse(localStorage.getItem(PT_KEY) || '{"default":7500,"overrides":[]}');
         if (!Array.isArray(raw.overrides)) raw.overrides = [];
         pointTargetsCache = raw;
         return raw;
-      } catch(e) { return { default: 3000, overrides: [] }; }
+      } catch(e) { return { default: 7500, overrides: [] }; }
     }
     function savePointTargets(obj) {
       pointTargetsCache = obj;
@@ -742,7 +742,7 @@
         .then(res => res.json())
         .then(result => {
           if (result && result.success !== false) {
-            const obj = { default: result.default || 3000, overrides: Array.isArray(result.overrides) ? result.overrides : [] };
+            const obj = { default: result.default || 7500, overrides: Array.isArray(result.overrides) ? result.overrides : [] };
             pointTargetsCache = obj;
             try { localStorage.setItem(PT_KEY, JSON.stringify(obj)); } catch(e) {}
           }
@@ -763,7 +763,7 @@
         return Number(periodTargetPoints);
       }
       // 3. Global default
-      return pt.default || 3000;
+      return pt.default || 7500;
     }
     function escapeHtmlDash(text) {
       const d = document.createElement('div'); d.textContent = text; return d.innerHTML;
@@ -810,6 +810,19 @@ function getUTCEndOfDay(year, month, day) {
 function getTodayUTC() {
   const now = new Date();
   const utc = getUTCComponents(now);
+  return getUTCStartOfDay(utc.year, utc.month, utc.day);
+}
+
+// Helper: Get effective date for period matching, accounting for the 5PM UTC boundary.
+// After 17:00 UTC, the next calendar day's period is considered active (matches server-side getActivePeriodDates logic).
+function getEffectiveDateUTC() {
+  const now = new Date();
+  const BOUNDARY_HOUR = 17; // Must match CONFIG.PERIOD_BOUNDARY_HOUR_UTC on the server
+  const effective = new Date(now);
+  if (now.getUTCHours() >= BOUNDARY_HOUR) {
+    effective.setUTCDate(effective.getUTCDate() + 1);
+  }
+  const utc = getUTCComponents(effective);
   return getUTCStartOfDay(utc.year, utc.month, utc.day);
 }
 
@@ -1111,8 +1124,9 @@ function filterPlayerTable() {
             // Sort events by start date
             periodEvents.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
             
-            // Find the current active period
-            const todayStr = formatDateAsUTC(todayUTC);
+            // Find the current active period using effective date (accounts for 5PM UTC boundary)
+            const effectiveDate = getEffectiveDateUTC();
+            const todayStr = formatDateAsUTC(effectiveDate);
             let activePeriod = null;
             
             // Look for the event that is currently active (today is between start and end)
@@ -1245,7 +1259,9 @@ function filterPlayerTable() {
             // Sort events by start date
             periodEvents.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
             
-            const todayStr = formatDateAsUTC(todayUTC);
+            // Use effective date (accounts for 5PM UTC boundary)
+            const effectiveDate = getEffectiveDateUTC();
+            const todayStr = formatDateAsUTC(effectiveDate);
             
             // Find the current active period first
             let activePeriod = null;
@@ -1424,7 +1440,7 @@ function filterPlayerTable() {
       if (currentPeriodTargetPoints != null && !isNaN(Number(currentPeriodTargetPoints)) && Number(currentPeriodTargetPoints) > 0) {
         return Number(currentPeriodTargetPoints);
       }
-      return loadPointTargets().default || 3000;
+      return loadPointTargets().default || 7500;
     }
 
     function updateRequiredPointsDisplay() {
