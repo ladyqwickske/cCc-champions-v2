@@ -9,6 +9,7 @@
   <script src="perf-debug.js"></script>
   <script src="config.js"></script>
   <script src="portal-shim.js"></script>
+  <script src="portal-auth.js"></script>
   <script>
   // Helper: Parse date string as UTC with proper timezone handling
   function parseDateUTC(str) {
@@ -704,6 +705,19 @@
         <button class="tab" onclick="MembersTab.switchTab('troopTab', event)">⚔️ Track Troops</button>
         <button class="tab" onclick="MembersTab.switchTab('heroTab', event)">🦸 Hero Level</button>
         <button class="tab" onclick="MembersTab.switchTab('exemptTab', event)">🛡️ Penalty Exemptions</button>
+        <button class="tab" onclick="MembersTab.switchTab('accountsTab', event)">🔐 Google Accounts</button>
+      </div>
+      <div id="accountsTab" class="tab-content">
+        <h3 style="margin:0 0 12px 0;">Linked Google Accounts</h3>
+        <p style="color:#b0b0b0; font-size:13px; margin-bottom:12px; text-align:left;">Link a member to a Google account so they can sign in and see their own bank balance and point penalties. The same address can be linked to several members — handy for alt accounts — and the profile page then offers a dropdown to switch between them. Members only get the public pages plus their profile; management pages stay officer-only, controlled by the list in the script.</p>
+        <div class="controls" style="margin-bottom:10px;">
+          <div class="search-box"><input type="text" id="accountsSearchInput" placeholder="🔍 Filter members..."></div>
+          <button class="btn" onclick="MembersTab.saveMemberAccounts()">💾 Save Accounts</button>
+          <button class="btn btn-secondary" onclick="MembersTab.loadMemberAccounts(true)">🔄 Reload</button>
+        </div>
+        <div id="accountsStatus" class="status"></div>
+        <div id="accountsSummary" style="font-size:12px; color:#b0b0b0; margin-bottom:8px; text-align:left;"></div>
+        <div id="accountsList" style="max-height:50vh; overflow-y:auto; border:1px solid #444; border-radius:8px; padding:10px; background:#232526; text-align:left;"></div>
       </div>
       <div id="exemptTab" class="tab-content">
         <h3 style="margin:0 0 12px 0;">Penalty Exemptions</h3>
@@ -879,6 +893,7 @@
         setTodayDefault();
         document.getElementById('memberSearchInput').addEventListener('input', (e) => filterMembers(e.target.value));
         document.getElementById('exemptSearchInput')?.addEventListener('input', () => renderExemptList());
+        document.getElementById('accountsSearchInput')?.addEventListener('input', () => renderMemberAccounts());
         document.querySelectorAll('#members th.sortable').forEach(th => {
           th.addEventListener('click', () => sortTable(th.dataset.column));
         });
@@ -1974,6 +1989,79 @@
           });
       }
 
+      // ── Linked Google Accounts ─────────────────────────────────
+      let memberAccounts = null;   // [{ name, email }]
+
+      function loadMemberAccounts(force) {
+        const status = document.getElementById('accountsStatus');
+        if (memberAccounts && !force) { renderMemberAccounts(); return; }
+        if (status) { status.textContent = 'Loading linked accounts...'; status.className = 'status'; }
+        fetch(window.GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getMemberGoogleAccounts' })
+        })
+          .then(res => res.json())
+          .then(result => {
+            memberAccounts = (result && result.members) ? result.members : [];
+            if (status) { status.textContent = ''; status.className = 'status'; }
+            renderMemberAccounts();
+          })
+          .catch(error => {
+            if (status) { status.textContent = 'Error: ' + error.message; status.className = 'status err'; }
+          });
+      }
+
+      function renderMemberAccounts() {
+        const container = document.getElementById('accountsList');
+        const summary = document.getElementById('accountsSummary');
+        if (!container || !memberAccounts) return;
+
+        const term = (document.getElementById('accountsSearchInput')?.value || '').toLowerCase().trim();
+        const rows = memberAccounts.filter(m => !term || m.name.toLowerCase().includes(term));
+        const linked = memberAccounts.filter(m => m.email).length;
+        if (summary) summary.textContent = `${linked} of ${memberAccounts.length} member(s) have a Google account linked.`;
+
+        if (rows.length === 0) {
+          container.innerHTML = '<p style="color:#888; font-size:13px;">No members match this filter.</p>';
+          return;
+        }
+
+        container.innerHTML = rows.map(m => `<div style="display:grid; grid-template-columns:minmax(120px,1fr) 2fr; gap:10px; align-items:center; padding:5px 4px;">
+          <span style="color:#e0e0e0; font-size:13px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.name)}</span>
+          <input type="email" value="${escapeHtml(m.email || '')}" placeholder="name@gmail.com" data-account="${escapeHtml(m.name)}"
+            onchange="MembersTab.updateMemberAccount(this)" style="padding:6px 8px; font-size:13px;">
+        </div>`).join('');
+      }
+
+      function updateMemberAccount(input) {
+        const name = input.getAttribute('data-account') || '';
+        const entry = memberAccounts.find(m => m.name === name);
+        if (entry) entry.email = (input.value || '').trim().toLowerCase();
+      }
+
+      function saveMemberAccounts() {
+        const status = document.getElementById('accountsStatus');
+        if (!memberAccounts) return;
+        if (status) { status.textContent = 'Saving...'; status.className = 'status'; }
+        fetch(window.GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'setMemberGoogleAccounts', members: memberAccounts })
+        })
+          .then(res => res.json())
+          .then(result => {
+            if (status) {
+              status.textContent = result?.message || 'Accounts saved.';
+              status.className = 'status ' + (result?.success ? 'ok' : 'err');
+            }
+            loadMemberAccounts(true);
+          })
+          .catch(error => {
+            if (status) { status.textContent = 'Error: ' + error.message; status.className = 'status err'; }
+          });
+      }
+
       function switchTab(tabId, evt) {
         document.querySelectorAll('#members .tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('#members .tab').forEach(t => t.classList.remove('active'));
@@ -1982,7 +2070,7 @@
 
         const memberTableSection = document.getElementById('memberTableSection');
         if (memberTableSection) {
-          memberTableSection.style.display = (tabId === 'chestPointsTab' || tabId === 'exemptTab') ? 'none' : '';
+          memberTableSection.style.display = (tabId === 'chestPointsTab' || tabId === 'exemptTab' || tabId === 'accountsTab') ? 'none' : '';
         }
 
         if (tabId === 'chestPointsTab') {
@@ -1990,6 +2078,9 @@
         }
         if (tabId === 'exemptTab') {
           loadExemptMembers();
+        }
+        if (tabId === 'accountsTab') {
+          loadMemberAccounts();
         }
       }
 
@@ -2040,7 +2131,7 @@
         document.getElementById('memberEmpty').style.display = 'block';
       }
 
-      return { init, loadAllData, switchTab, loadMemberTroops, submitAllTroops, submitHeroLevelEntry, toggleHeroBatch, addToHeroBatch, removeHeroBatchEntry, saveHeroBatchEntries, submitAddMember, submitNameChange, submitRemoveMember, loadChestPointsTabData, togglePointTargetsPanel, savePtDefault, addPtOverride, updatePtOverride, loadExemptMembers, toggleExemptMember, saveExemptMembers };
+      return { init, loadAllData, switchTab, loadMemberTroops, submitAllTroops, submitHeroLevelEntry, toggleHeroBatch, addToHeroBatch, removeHeroBatchEntry, saveHeroBatchEntries, submitAddMember, submitNameChange, submitRemoveMember, loadChestPointsTabData, togglePointTargetsPanel, savePtDefault, addPtOverride, updatePtOverride, loadExemptMembers, toggleExemptMember, saveExemptMembers, loadMemberAccounts, updateMemberAccount, saveMemberAccounts };
     })();
   </script>
 </body>

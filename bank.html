@@ -9,6 +9,7 @@
   <script src="perf-debug.js"></script>
   <script src="config.js"></script>
   <script src="portal-shim.js"></script>
+  <script src="portal-auth.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -664,6 +665,7 @@
             <td>${escapeHtml(tx.depositedBy || '-')}</td>
             <td>${escapeHtml(tx.recipient || '-')}</td>
             <td>${escapeHtml(tx.reference || '-')}</td>
+            <td>${escapeHtml(tx.remarks || '-')}</td>
           </tr>
         `;
         }).join('');
@@ -841,6 +843,7 @@
           const fee = parseFloat(document.getElementById('fee').value);
           const depositedBy = document.getElementById('depositedBy').value.trim();
           const recipient = document.getElementById('recipient').value.trim();
+          const remarks = (document.getElementById('remarks')?.value || '').trim();
           const dateInput = document.getElementById('transactionDate').value;
           var timestamp;
           if (dateInput) {
@@ -881,7 +884,8 @@
               fee,
               balance: calculatedBalance,
               depositedBy: depositedBy || '',
-              recipient: recipient || ''
+              recipient: recipient || '',
+              remarks: remarks || ''
             });
         });
       }
@@ -1077,6 +1081,11 @@
           <small style="color:#999;font-size:11px;margin-top:2px;">Leave empty to use today's date</small>
         </div>
 
+        <div class="form-row">
+          <label for="remarks">Remarks (optional)</label>
+          <input type="text" id="remarks" name="remarks" placeholder="e.g. loan for T9 upgrade, partial penalty repayment">
+        </div>
+
         <button type="submit" class="btn">Submit Transaction</button>
       </form>
       <div id="result"></div>
@@ -1152,6 +1161,7 @@
                   <th>Deposited By</th>
                   <th>Recipient</th>
                   <th>Reference</th>
+                  <th>Remarks</th>
                 </tr>
               </thead>
               <tbody id="transactionsBody"></tbody>
