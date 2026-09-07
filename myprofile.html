@@ -352,11 +352,12 @@
         + '</div>';
 
       const active = data.activePeriod;
-      if (active && active.periodName) {
+      if (active) {
         const pct = active.percentComplete;
         const pctColor = pct >= 100 ? '#8bc34a' : (pct >= 70 ? '#42a5f5' : (pct >= 40 ? '#ff9800' : '#ef5350'));
+        const periodLabel = active.periodName || 'Current period';
         html += '<h2>Current Period</h2><div class="cards">'
-          + card('Period', escapeHtml(active.periodName), active.startDate + ' → ' + active.endDate)
+          + card('Period', escapeHtml(periodLabel), active.startDate + ' → ' + active.endDate)
           + card('Points Earned', '<span style="color:' + pctColor + '">' + fmtInt(active.earnedPoints) + '</span>', fmtInt(active.chestCount) + ' chests opened')
           + card('Your Target', fmtInt(active.target), active.penaltyPoints > 0 ? 'Includes +' + fmtInt(active.penaltyPoints) + ' penalty points' : 'Standard target')
           + card('Still Needed', '<span style="color:' + pctColor + '">' + fmtInt(active.remaining) + '</span>', pct != null ? pct + '% of target reached' : '')
@@ -380,7 +381,7 @@
               const points = Number(c.points) || 0;
               const width = Math.round((points / maxPoints) * 100);
               const share = active.earnedPoints > 0 ? Math.round((points / active.earnedPoints) * 100) : 0;
-              return '<tr>'
+              let rows = '<tr>'
                 + '<td>' + escapeHtml(c.type) + '</td>'
                 + '<td>' + fmtInt(c.chests) + '</td>'
                 + '<td><strong>' + fmtInt(points) + '</strong></td>'
@@ -390,6 +391,18 @@
                 + '<span style="font-size:11px;color:#888;width:32px;text-align:right;">' + share + '%</span>'
                 + '</div></td>'
                 + '</tr>';
+              // Epic Squad rows expand into their individual squads, as on the dashboard
+              (c.splits || []).forEach(s => {
+                const sPoints = Number(s.points) || 0;
+                const sShare = points > 0 ? Math.round((sPoints / points) * 100) : 0;
+                rows += '<tr style="background:#1f2021;">'
+                  + '<td style="padding-left:24px;color:#b0b0b0;font-size:12px;">↳ ' + escapeHtml(s.label) + '</td>'
+                  + '<td style="color:#b0b0b0;font-size:12px;">' + fmtInt(s.chests) + '</td>'
+                  + '<td style="color:#b0b0b0;font-size:12px;">' + fmtInt(sPoints) + '</td>'
+                  + '<td style="color:#666;font-size:11px;">' + sShare + '% of category</td>'
+                  + '</tr>';
+              });
+              return rows;
             }).join('')
             + '</tbody></table></div>';
         }
