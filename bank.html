@@ -563,6 +563,26 @@
         return parsed.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
       }
 
+      const OTHER_MEMBER_VALUE = '__other__';
+
+      function toggleCustomMemberRow() {
+        const memberSelect = document.getElementById('memberName');
+        const customRow = document.getElementById('customMemberRow');
+        const customInput = document.getElementById('customMemberName');
+        if (!memberSelect || !customRow) return;
+        const isOther = memberSelect.value === OTHER_MEMBER_VALUE;
+        customRow.style.display = isOther ? 'block' : 'none';
+        if (isOther) { if (customInput) customInput.focus(); }
+        else if (customInput) customInput.value = '';
+      }
+
+      function resolveMemberName() {
+        const memberSelect = document.getElementById('memberName');
+        if (!memberSelect) return '';
+        if (memberSelect.value !== OTHER_MEMBER_VALUE) return memberSelect.value;
+        return (document.getElementById('customMemberName')?.value || '').trim();
+      }
+
       async function loadMemberOptions() {
         const memberSelect = document.getElementById('memberName');
         if (!memberSelect) return;
@@ -570,26 +590,30 @@
         memberSelect.innerHTML = '<option value="">Loading members...</option>';
         memberSelect.disabled = true;
 
+        const optionsHtml = (names) => names
+          .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+          .join('');
+
         try {
-          const members = await runGASFunction('getMembersList');
-          const memberNames = (Array.isArray(members) ? members : [])
-            .map(m => (m && m.name) ? String(m.name).trim() : '')
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+          const result = await runGASFunction('getBankMemberOptions');
+          const active = Array.isArray(result?.active) ? result.active : [];
+          const former = Array.isArray(result?.former) ? result.former : [];
+          const external = Array.isArray(result?.external) ? result.external : [];
 
-          if (!memberNames.length) {
-            memberSelect.innerHTML = '<option value="">No members found</option>';
-            memberSelect.disabled = true;
-            return;
-          }
+          let html = '<option value="">Select member...</option>';
+          if (active.length) html += `<optgroup label="Clan members">${optionsHtml(active)}</optgroup>`;
+          if (former.length) html += `<optgroup label="Former members">${optionsHtml(former)}</optgroup>`;
+          if (external.length) html += `<optgroup label="External / other clans">${optionsHtml(external)}</optgroup>`;
+          html += `<option value="${OTHER_MEMBER_VALUE}">➕ Other name (type it in)...</option>`;
 
-          memberSelect.innerHTML = '<option value="">Select member...</option>' + memberNames
-            .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
-            .join('');
+          memberSelect.innerHTML = html;
           memberSelect.disabled = false;
+          toggleCustomMemberRow();
         } catch (error) {
-          memberSelect.innerHTML = '<option value="">Failed to load members</option>';
-          memberSelect.disabled = true;
+          // Still allow a free-text entry when the directory cannot be loaded
+          memberSelect.innerHTML = '<option value="">Failed to load members</option>'
+            + `<option value="${OTHER_MEMBER_VALUE}">➕ Other name (type it in)...</option>`;
+          memberSelect.disabled = false;
           console.error('Failed to load members:', error);
         }
       }
@@ -721,9 +745,18 @@
             ? `<span style="color:#ef5350;font-weight:600;" title="Owes the bank">-${fmt(Math.abs(balance))}</span>`
             : `<span style="color:#8bc34a;">${fmt(balance)}</span>`;
           const penalties = Number(item.penaltiesTotal) || 0;
+          const status = item.status || 'active';
+          const statusStyles = {
+            active: 'background:#1b5e20;color:#c8e6c9;',
+            former: 'background:#5d4037;color:#ffccbc;',
+            external: 'background:#37474f;color:#cfd8dc;'
+          };
+          const statusLabels = { active: 'Active', former: 'Former', external: 'External' };
+          const statusBadge = `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;${statusStyles[status] || statusStyles.external}">${statusLabels[status] || status}</span>`;
           return `
           <tr>
             <td>${escapeHtml(item.memberName || '-')}</td>
+            <td>${statusBadge}</td>
             <td>${balanceCell}</td>
             <td>${fmt(item.depositsTotal)}</td>
             <td>${fmt(item.withdrawalsTotal)}</td>
@@ -737,16 +770,15 @@
 
       function filterBalances() {
         const filterText = (document.getElementById('balancesFilterMember')?.value || '').toLowerCase().trim();
-        
-        if (!filterText) {
-          renderBalances(allBalancesData);
-          return;
-        }
+        const filterStatus = document.getElementById('balancesFilterStatus')?.value || '';
 
-        const filtered = allBalancesData.filter(item => {
-          const memberName = (item.memberName || '').toLowerCase();
-          return memberName.includes(filterText);
-        });
+        let filtered = allBalancesData;
+        if (filterText) {
+          filtered = filtered.filter(item => (item.memberName || '').toLowerCase().includes(filterText));
+        }
+        if (filterStatus) {
+          filtered = filtered.filter(item => (item.status || 'active') === filterStatus);
+        }
 
         renderBalances(filtered);
       }
@@ -803,7 +835,7 @@
             return;
           }
 
-          const memberName = document.getElementById('memberName').value;
+          const memberName = resolveMemberName();
           const transactionType = document.getElementById('transactionType').value;
           const amount = parseFloat(document.getElementById('amount').value);
           const fee = parseFloat(document.getElementById('fee').value);
@@ -817,6 +849,10 @@
             timestamp = new Date().toISOString();
           }
 
+          if (!memberName) {
+            if (result) result.innerHTML = '<div class="error">Please select a member or type a name.</div>';
+            return;
+          }
           if (!(amount > 0)) {
             if (result) result.innerHTML = '<div class="error">Amount must be greater than 0.</div>';
             return;
@@ -829,6 +865,8 @@
             .withSuccessHandler(function(msg) {
               if (result) result.innerHTML = '<div class="success">' + msg + '</div>';
               form.reset();
+              toggleCustomMemberRow();
+              loadMemberOptions();
               loadTransactions();
               loadMemberBalances();
             })
@@ -858,6 +896,15 @@
       const balancesFilterMember = document.getElementById('balancesFilterMember');
       if (balancesFilterMember) {
         balancesFilterMember.addEventListener('input', filterBalances);
+      }
+      const balancesFilterStatus = document.getElementById('balancesFilterStatus');
+      if (balancesFilterStatus) {
+        balancesFilterStatus.addEventListener('change', filterBalances);
+      }
+
+      const memberSelectEl = document.getElementById('memberName');
+      if (memberSelectEl) {
+        memberSelectEl.addEventListener('change', toggleCustomMemberRow);
       }
 
       // Filter event listeners for transactions
@@ -990,6 +1037,12 @@
           </select>
         </div>
 
+        <div class="form-row" id="customMemberRow" style="display: none;">
+          <label for="customMemberName">Other Name</label>
+          <input type="text" id="customMemberName" name="customMemberName" placeholder="Former member or someone from another clan">
+          <small style="color:#999;font-size:11px;margin-top:2px;">Used as-is; keep the spelling consistent so their balance stays on one row.</small>
+        </div>
+
         <div class="form-row">
           <label for="transactionType">Transaction Type</label>
           <select id="transactionType" name="transactionType" required>
@@ -1049,10 +1102,17 @@
               <thead>
                 <tr>
                   <th><input type="text" id="balancesFilterMember" placeholder="Filter by member..." class="header-filter"></th>
+                  <th><select id="balancesFilterStatus" class="header-filter">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="former">Former</option>
+                    <option value="external">External</option>
+                  </select></th>
                   <th colspan="6" style="text-align: center; padding: 0;"></th>
                 </tr>
                 <tr>
                   <th>Member</th>
+                  <th>Status</th>
                   <th>Total Balance</th>
                   <th>Total Deposits</th>
                   <th>Total Withdrawals</th>
